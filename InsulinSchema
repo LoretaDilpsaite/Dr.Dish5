@@ -1,0 +1,182 @@
+curl -X 'PUT' \
+  'https://hapi.fhir.org/baseR4/MedicationDispense/M14131413' \
+  -H 'accept: application/fhir+json' \
+  -H 'Content-Type: application/fhir+json' \
+  -d '{
+  "resourceType": "MedicationDispense",
+  "id": "M14131413",
+  "contained": [
+    {
+      "resourceType": "Medication",
+      "id": "M14131413",
+      "code": {
+        "coding": [
+          {
+            "system": "http://hl7.org/fhir/sid/ndc",
+            "code": "0169-7501-11",
+            "display": "NOVOLOG, 1 VIAL, GLASS in 1 CARTON (0169-7501-11) > 10 mL in 1 VIAL, GLASS (package)"
+          }
+        ],
+        "text": "Novolog 100u/ml"
+      },
+      "doseForm": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "385219001",
+            "display": "Solution for injection"
+          }
+        ]
+      },
+      "ingredient": [
+        {
+          "item": {
+            "concept": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "325072002",
+                  "display": "Insulin Aspart (substance)"
+                }
+              ]
+            }
+          },
+          "strengthRatio": {
+            "numerator": {
+              "value": 100,
+              "system": "http://unitsofmeasure.org",
+              "code": "U"
+            },
+            "denominator": {
+              "value": 1,
+              "system": "http://unitsofmeasure.org",
+              "code": "mL"
+            }
+          }
+        }
+      ],
+      "batch": {
+        "lotNumber": "12345",
+        "expirationDate": "2019-10-31"
+      }
+    },
+    {
+      "resourceType": "MedicationRequest",
+      "id": "medrx0321",
+      "status": "active",
+      "intent": "order",
+      "medicationReference": {
+        "reference": "#M14131413"
+      },
+      "subject": {
+        "reference": "Patient/pat1"
+      }
+    }
+  ],
+  "status": "in-progress",
+  "medication": {
+    "reference": {
+      "reference": "#M14131413",
+      "display": "NOVOLOG, 1 VIAL, GLASS in 1 CARTON (0169-7501-11) > 10 mL in 1 VIAL, GLASS (package)"
+    }
+  },
+  "subject": {
+    "reference": "Patient/pat1",
+    "display": "Nicole Bronzel"
+  },
+  "performer": [
+    {
+      "function": {
+        "coding": [
+          {
+            "system": "http://terminology.hl7.org/CodeSystem/medicationdispense-performer-function",
+            "code": "finalchecker",
+            "display": "Final Checker"
+          }
+        ]
+      },
+      "actor": {
+        "reference": "Practitioner/f006"
+      }
+    }
+  ],
+  "authorizingPrescription": [
+    {
+      "reference": "#medrx0321"
+    }
+  ],
+  "type": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "RFP",
+        "display": "Refill - Part Fill"
+      }
+    ]
+  },
+  "quantity": {
+    "value": 10,
+    "system": "http://unitsofmeasure.org",
+    "code": "ml"
+  },
+  "daysSupply": {
+    "value": 30,
+    "unit": "Day",
+    "system": "http://unitsofmeasure.org",
+    "code": "d"
+  },
+  "whenPrepared": "2015-01-15T10:20:00Z",
+  "whenHandedOver": "2015-01-15T16:20:00Z",
+  "extension": [
+    {
+      "url": "http://example.org/fhir/StructureDefinition/insulin-dosage-schema",
+      "extension": [
+        {
+          "url": "range",
+          "extension": [
+            { "url": "low", "valueInteger": 200 },
+            { "url": "high", "valueInteger": 250 },
+            { "url": "insulinType", "valueString": "Novolog" },
+            { "url": "dose", "valueString": "2 IE" }
+          ]
+        },
+        {
+          "url": "range",
+          "extension": [
+            { "url": "low", "valueInteger": 251 },
+            { "url": "high", "valueInteger": 300 },
+            { "url": "insulinType", "valueString": "Novolog" },
+            { "url": "dose", "valueString": "4 IE" }
+          ]
+        },
+        {
+          "url": "range",
+          "extension": [
+            { "url": "low", "valueInteger": 301 },
+            { "url": "high", "valueInteger": 350 },
+            { "url": "insulinType", "valueString": "Novolog" },
+            { "url": "dose", "valueString": "6 IE" }
+          ]
+        },
+        {
+          "url": "range",
+          "extension": [
+            { "url": "low", "valueInteger": 351 },
+            { "url": "high", "valueInteger": 400 },
+            { "url": "insulinType", "valueString": "Novolog" },
+            { "url": "dose", "valueString": "8 IE" }
+          ]
+        },
+        {
+          "url": "range",
+          "extension": [
+            { "url": "low", "valueInteger": 401 },
+            { "url": "high", "valueInteger": 800 },
+            { "url": "insulinType", "valueString": "Novolog" },
+            { "url": "dose", "valueString": "10 IE" }
+          ]
+        }
+      ]
+    }
+  ]
+}
