@@ -1,0 +1,45 @@
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///insulin_data.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+
+class InsulinData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    blutzucker = db.Column(db.Float, nullable=False)
+    insulinmenge = db.Column(db.Float, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat(),
+            "blutzucker": self.blutzucker,
+            "insulinmenge": self.insulinmenge
+        }
+
+@app.route("/add", methods=["POST"])
+def add_entry():
+    data = request.json
+    try:
+        blutzucker = float(data.get("blutzucker"))
+        insulinmenge = float(data.get("insulinmenge"))
+        new_entry = InsulinData(blutzucker=blutzucker, insulinmenge=insulinmenge)
+        db.session.add(new_entry)
+        db.session.commit()
+        return jsonify({"message": "Daten gespeichert", "data": new_entry.to_dict()}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/entries", methods=["GET"])
+def get_entries():
+    entries = InsulinData.query.all()
+    return jsonify([entry.to_dict() for entry in entries])
+
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
