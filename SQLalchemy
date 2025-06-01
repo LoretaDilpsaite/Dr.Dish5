@@ -10,8 +10,11 @@ db = SQLAlchemy(app)
 class InsulinData(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    blutzucker = db.Column(db.Float, nullable=False)
-    insulinmenge = db.Column(db.Float, nullable=False)
+    patient_id = db.Column(db.String(20), nullable=False)
+    blutzucker = db.Column(db.Float, nullable=False)  # 🔥 Float für genaue Messungen
+    broteinheiten = db.Column(db.Float, nullable=False)  # 🔥 Float für Mahlzeitenfaktor
+    insulinmenge = db.Column(db.Float, nullable=False)  # 🔥 Float für Insulinberechnung
+
 
     def to_dict(self):
         return {
@@ -43,3 +46,4 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
     app.run(debug=True)
+
