@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>Insulin Rechner</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+</head>
+<body class="container mt-5">
+    <h1 class="text-center">Insulin Rechner</h1>
+
+    <form id="insulin-form" class="mt-3">
+        <div class="mb-3">
+            <label for="patient_id" class="form-label">Patienten-ID:</label>
+            <input type="text" id="patient_id" name="patient_id" class="form-control" required />
+        </div>
+        <div class="mb-3">
+            <label for="blutzucker" class="form-label">Blutzuckerwert (mg/dL):</label>
+            <input type="number" id="blutzucker" name="blutzucker" class="form-control" required />
+        </div>
+        <div class="mb-3">
+            <label for="broteinheiten" class="form-label">Eingenommene Broteinheiten:</label>
+            <input type="number" id="broteinheiten" name="broteinheiten" class="form-control" required />
+        </div>
+        <button type="submit" class="btn btn-primary">Berechnen & Speichern</button>
+    </form>
+
+    <hr />
+
+    <h2>Berechnete Insulinmenge</h2>
+    <p id="result">Bitte Werte eingeben und berechnen.</p>
+
+    <script>
+        document.getElementById("insulin-form").addEventListener("submit", async function(event) {
+            event.preventDefault();
+
+            const formData = new FormData(this);
+
+            try {
+                const response = await fetch("/berechne_insulin", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById("result").innerText = `❌ Fehler: ${data.error}`;
+                } else {
+                    document.getElementById("result").innerText =
+                        `Benötigte Insulinmenge: ${data.berechnete_insulinmenge} IE | Patient: ${data.patient_id} | Zeitpunkt: ${data.timestamp}`;
+                }
+            } catch (error) {
+                console.error("Fehler beim Abrufen der Daten:", error);
+                document.getElementById("result").innerText = "❌ Fehler beim Abrufen der Daten.";
+            }
+        });
+    </script>
+</body>
+</html>
