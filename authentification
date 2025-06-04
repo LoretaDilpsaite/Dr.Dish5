@@ -1,0 +1,215 @@
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import requests
+import os
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Für Sessions
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///insulin_data.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False  
+db = SQLAlchemy(app)
+
+# OAuth2-Konfiguration
+OAUTH_CONFIG = {
+    'client_id': 'medication-app',
+    'client_secret': 'your-client-secret-here',
+    'auth_url': 'http://127.0.0.1:5000/oauth/authorize',
+    'token_url': 'http://127.0.0.1:5000/oauth/token',
+    'redirect_uri': 'http://localhost:5000/callback',
+    'scope': 'user/MedicationStatement.read user/MedicationStatement.write'
+}
+
+# Konstante Patienten-ID und Insulinschema-URL
+PATIENT_ID = "A16151615"
+INSULIN_SCHEMA_URL = "https://hapi.fhir.org/baseR4/MedicationDispense/M14131413"
+FHIR_BASE_URL = "https://hapi.fhir.org/baseR4"
+
+
+class InsulinData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    patient_id = db.Column(db.String(20), nullable=False)
+    blutzucker = db.Column(db.Float, nullable=False)
+    broteinheiten = db.Column(db.Float, nullable=False)
+    insulinmenge = db.Column(db.Float, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat(),
+            "patient_id": self.patient_id,
+            "blutzucker": self.blutzucker,
+            "broteinheiten": self.broteinheiten,
+            "insulinmenge": self.insulinmenge
+        }
+
+# --- OAuth Helper ---
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'access_token' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login')
+def login():
+    auth_url = (
+        f"{OAUTH_CONFIG['auth_url']}?response_type=code"
+        f"&client_id={OAUTH_CONFIG['client_id']}"
+        f"&redirect_uri={OAUTH_CONFIG['redirect_uri']}"
+        f"&scope={OAUTH_CONFIG['scope']}"
+    )
+    return redirect(auth_url)
+
+@app.route('/callback')
+def callback():
+    code = request.args.get('code')
+    if not code:
+        return "Fehler: Kein Code erhalten", 400
+
+    token_response = requests.post(
+        OAUTH_CONFIG['token_url'],
+        data={
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': OAUTH_CONFIG['redirect_uri'],
+            'client_id': OAUTH_CONFIG['client_id'],
+            'client_secret': OAUTH_CONFIG['client_secret']
+        }
+    )
+    if token_response.status_code == 200:
+        token_json = token_response.json()
+        session['access_token'] = token_json.get('access_token')
+        return redirect(url_for('index'))
+    else:
+        return f"Fehler beim Token-Austausch: {token_response.text}", 400
+
+@app.route('/logout')
+def logout():
+    session.pop('access_token', None)
+    return redirect(url_for('index'))
+
+# --- Insulinschema & Berechnung ---
+def lade_insulinschema():
+    """Lädt korrekt das Insulinschema aus FHIR Extension"""
+    response = requests.get(INSULIN_SCHEMA_URL)
+    response.raise_for_status()
+    data = response.json()
+
+    korr_table = []
+    for ext in data.get("extension", []):
+        if ext.get("url") == "http://example.org/fhir/StructureDefinition/insulin-dosage-schema":
+            for range_block in ext.get("extension", []):
+                if range_block.get("url") == "range":
+                    low = high = dose = None
+                    for detail in range_block.get("extension", []):
+                        if detail["url"] == "low":
+                            low = detail.get("valueInteger")
+                        elif detail["url"] == "high":
+                            high = detail.get("valueInteger")
+                        elif detail["url"] == "dose":
+                            try:
+                                dose = float(detail.get("valueString", "0 IE").split()[0])
+                            except:
+                                dose = 0
+                    if None not in (low, high, dose):
+                        korr_table.append({
+                            "low": low,
+                            "high": high,
+                            "dose": dose
+                        })
+    print("Geladene Korrekturtabelle:", korr_table)
+    return korr_table
+
+def berechne_insulin(blutzucker, broteinheiten, korr_table):
+    korrektur_insulin = 0
+    for eintrag in korr_table:
+        if eintrag["low"] <= blutzucker <= eintrag["high"]:
+            korrektur_insulin = eintrag["dose"]
+            break
+    mahlzeiten_insulin = broteinheiten / 2
+    gesamt_insulin = korrektur_insulin + mahlzeiten_insulin
+    return round(gesamt_insulin, 2), round(korrektur_insulin, 2), round(mahlzeiten_insulin, 2)
+
+def baue_medication_administration(patient_id, insulinmenge):
+    resource = {
+        "resourceType": "MedicationAdministration",
+        "id": f"admin-M14131413",
+        "status": "completed",
+        "medicationReference": {
+            "reference": "MedicationDispense/M14131413"
+        },
+        "subject": {
+            "reference": f"Patient/{patient_id}"
+        },
+        "effectiveDateTime": datetime.utcnow().isoformat(),
+        "dosage": {
+            "text": f"{insulinmenge} IE Insulin",
+            "dose": {
+                "value": insulinmenge,
+                "unit": "IE",
+                "system": "http://unitsofmeasure.org",
+                "code": "IU"
+            }
+        }
+    }
+    return resource
+
+def sende_medication_administration(resource):
+    url = f"{FHIR_BASE_URL}/MedicationAdministration/admin-M14131413"
+    headers = {
+        "Content-Type": "application/fhir+json",
+        "Authorization": f"Bearer {session.get('access_token')}"
+    }
+    response = requests.put(url, json=resource, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+@app.route("/")
+@login_required
+def index():
+    return render_template("index.html", patient_id=PATIENT_ID)
+
+@app.route("/berechne_insulin", methods=["POST"])
+@login_required
+def route_berechne_insulin():
+    try:
+        blutzucker = float(request.form["blutzucker"])
+        broteinheiten = float(request.form["broteinheiten"])
+
+        korr_table = lade_insulinschema()
+        gesamt_insulin, korrektur_insulin, mahlzeiten_insulin = berechne_insulin(blutzucker, broteinheiten, korr_table)
+
+        eintrag = InsulinData(
+            patient_id=PATIENT_ID,
+            blutzucker=blutzucker,
+            broteinheiten=broteinheiten,
+            insulinmenge=gesamt_insulin
+        )
+        db.session.add(eintrag)
+        db.session.commit()
+
+        med_admin = baue_medication_administration(PATIENT_ID, gesamt_insulin)
+        fhir_response = sende_medication_administration(med_admin)
+
+        return jsonify({
+            "patient_id": PATIENT_ID,
+            "blutzucker": blutzucker,
+            "broteinheiten": broteinheiten,
+            "gesamt_insulin": gesamt_insulin,
+            "korrektur_insulin": korrektur_insulin,
+            "mahlzeiten_insulin": mahlzeiten_insulin,
+            "timestamp": eintrag.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "fhir_response": fhir_response,
+            "medication_administration": med_admin
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(host="0.0.0.0", port=5000, debug=True)
